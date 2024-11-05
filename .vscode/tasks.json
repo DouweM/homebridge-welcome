@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build and Link",
+      "type": "shell",
+      "command": ". ~/.nvm/nvm.sh && nvm use 22.10.0 && npm run build && npm link",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": [
+        "$tsc"
+      ]
+    }
+  ]
+}
