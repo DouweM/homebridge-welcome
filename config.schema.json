@@ -5,11 +5,17 @@
   "schema": {
     "type": "object",
     "properties": {
-      "name": {
-        "title": "Name",
+      "server_url": {
+        "title": "Welcome Server URL",
         "type": "string",
         "required": true,
-        "default": "Welcome"
+        "default": "https://welcome.example.com"
+      },
+      "home_id": {
+        "title": "Home ID",
+        "type": "string",
+        "required": true,
+        "default": "main"
       }
     }
   }

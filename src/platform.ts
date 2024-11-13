@@ -1,19 +1,38 @@
 import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
 
-import { ExamplePlatformAccessory } from './platformAccessory.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
+import { AccessorySubject } from './models/accessory_subject.js';
+import { Person, PersonRaw } from './models/person.js';
+import { Room, RoomRaw } from './models/room.js';
+import { Role, RoleRaw } from './models/role.js';
+import { ConnectedPerson, ConnectedPersonRaw } from './models/connected_person.js';
+import { AccessoryHandler } from './handlers/base.js';
+import { PersonAccessoryHandler } from './handlers/person.js';
+import { RoleAccessoryHandler } from './handlers/role.js';
+import { Home } from './models/home.js';
+import { HomeRaw } from './models/home.js';
+import { Anyone } from './models/anyone.js';
+import { AnyoneAccessoryHandler } from './handlers/anyone.js';
 
-/**
- * HomebridgePlatform
- * This class is the main constructor for your plugin, this is where you should
- * parse the user config and discover/register accessories with Homebridge.
- */
-export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
+const ACCESSORY_HANDLERS = [
+  PersonAccessoryHandler,
+  RoleAccessoryHandler,
+  AnyoneAccessoryHandler,
+];
+
+export class WelcomePlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
   public readonly Characteristic: typeof Characteristic;
 
-  // this is used to track restored cached accessories
-  public readonly accessories: PlatformAccessory[] = [];
+  public readonly accessories: Map<string, PlatformAccessory> = new Map();
+  public readonly accessoryHandlers: Map<string, AccessoryHandler> = new Map();
+
+  public readonly people: Map<string, Person> = new Map();
+  public readonly roles: Map<string, Role> = new Map();
+  public readonly rooms: Map<string, Room> = new Map();
+  public readonly anyone: Anyone = new Anyone(this);
+
+  public connectedPeople: ConnectedPerson[] = [];
 
   constructor(
     public readonly log: Logging,
@@ -23,95 +42,232 @@ export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
 
-    this.log.debug('Finished initializing platform:', this.config.name);
+    if (!this.parseConfig()) {
+      return;
+    }
 
-    // When this event is fired it means Homebridge has restored all cached accessories from disk.
-    // Dynamic Platform plugins should only register new accessories after this event was fired,
-    // in order to ensure they weren't added to homebridge already. This event can also be used
-    // to start discovery of new accessories.
     this.api.on('didFinishLaunching', () => {
-      log.debug('Executed didFinishLaunching callback');
-      // run the method to discover / register your devices as accessories
-      this.discoverDevices();
+      this.refresh().then(() => this.refreshPeriodically());
     });
   }
 
-  /**
-   * This function is invoked when homebridge restores cached accessories from disk at startup.
-   * It should be used to set up event handlers for characteristics and update respective values.
-   */
-  configureAccessory(accessory: PlatformAccessory) {
-    this.log.info('Loading accessory from cache:', accessory.displayName);
+  private parseConfig(): boolean {
+    if (!this.config.server_url) {
+      this.log.error('Welcome Server URL is required');
+      return false;
+    }
 
-    // add the restored accessory to the accessories cache, so we can track if it has already been registered
-    this.accessories.push(accessory);
+    if (!this.config.home_id) {
+      this.log.error('Home ID is required');
+      return false;
+    }
+
+    this.config.interval ||= 30;
+
+    return true;
   }
 
-  /**
-   * This is an example method showing how to register discovered accessories.
-   * Accessories must only be registered once, previously created accessories
-   * must not be registered again to prevent "duplicate UUID" errors.
-   */
-  discoverDevices() {
-    // EXAMPLE ONLY
-    // A real plugin you would discover accessories from the local network, cloud services
-    // or a user-defined array in the platform config.
-    const exampleDevices = [
-      {
-        exampleUniqueId: 'ABCD',
-        exampleDisplayName: 'Bedroom',
-      },
-      {
-        exampleUniqueId: 'EFGH',
-        exampleDisplayName: 'Kitchen',
-      },
+  private refresh(): Promise<void> {
+    return Promise.all([
+      this.loadPeople(),
+      this.loadRoles(),
+      this.loadRooms(),
+    ])
+      .then(() => this.loadConnectedPeople())
+      .then(() => this.refreshAccessories());
+  }
+
+  private refreshPeriodically(): void {
+    setInterval(() => this.refresh(), this.config.interval * 1000);
+  }
+
+  loadPeople(): Promise<void> {
+    return fetch(`${this.config.server_url}/api/people`)
+      .then(res => res.json())
+      .then((raws: PersonRaw[]) => raws.map(raw => new Person(this, raw)))
+      .then(people => {
+        this.people.clear();
+
+        for (const person of people) {
+          this.people.set(person.id, person);
+        }
+
+        this.log.debug(`Loaded ${people.length} people`);
+      })
+      .catch(err => {
+        this.log.error('Failed to load people:', err);
+        throw err;
+      });
+  }
+
+  loadRoles(): Promise<void> {
+    return fetch(`${this.config.server_url}/api/roles`)
+      .then(res => res.json())
+      .then((raws: RoleRaw[]) => raws.map(raw => new Role(this, raw)))
+      .then(roles => {
+        this.roles.clear();
+
+        for (const role of roles) {
+          this.roles.set(role.id, role);
+        }
+
+        this.log.debug(`Loaded ${roles.length} roles`);
+      })
+      .catch(err => {
+        this.log.error('Failed to load roles:', err);
+        throw err;
+      });
+  }
+
+  loadRooms(): Promise<void> {
+    return fetch(`${this.config.server_url}/api/homes/${this.config.home_id}`)
+      .then(res => res.json())
+      .then((raw: HomeRaw) => new Home(raw))
+      .then(home => home.rooms)
+      .then(rooms => {
+        this.rooms.clear();
+
+        for (const room of rooms) {
+          this.rooms.set(room.id, room);
+        }
+
+        this.log.debug(`Loaded ${rooms.length} rooms`);
+      })
+      .catch(err => {
+        this.log.error('Failed to load rooms:', err);
+        throw err;
+      });
+  }
+
+  loadConnectedPeople(): Promise<void> {
+    return fetch(`${this.config.server_url}/api/homes/${this.config.home_id}/people`)
+      .then(res => res.json())
+      .then((raws: ConnectedPersonRaw[]) => raws.map(raw => new ConnectedPerson(this, raw)))
+      .then(connectedPeople => {
+        this.connectedPeople = connectedPeople;
+
+        for (const connectedPerson of connectedPeople) {
+          let label = connectedPerson.subject.displayName;
+          if (!connectedPerson.known) {
+            label += ` ("${connectedPerson.person.displayName}")`;
+          }
+
+          this.log.debug(`Connected person: ${label} @ ${connectedPerson.room.displayName}`);
+        }
+      })
+      .catch(err => {
+        this.log.error('Failed to load connected people:', err);
+        throw err;
+      });
+  }
+
+  configureAccessory(accessory: PlatformAccessory) {
+    this.accessories.set(accessory.UUID, accessory);
+  }
+
+  refreshAccessories() {
+    this.removeInvalidAccessories();
+
+    const subjects = [
+      ...this.connectedPeople.map(connection => connection.subject),
+      this.anyone,
     ];
 
-    // loop over the discovered devices and register each one if it has not already been registered
-    for (const device of exampleDevices) {
-      // generate a unique id for the accessory this should be generated from
-      // something globally unique, but constant, for example, the device serial
-      // number or MAC address
-      const uuid = this.api.hap.uuid.generate(device.exampleUniqueId);
-
-      // see if an accessory with the same uuid has already been registered and restored from
-      // the cached devices we stored in the `configureAccessory` method above
-      const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
-
-      if (existingAccessory) {
-        // the accessory already exists
-        this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
-
-        // if you need to update the accessory.context then you should run `api.updatePlatformAccessories`. e.g.:
-        // existingAccessory.context.device = device;
-        // this.api.updatePlatformAccessories([existingAccessory]);
-
-        // create the accessory handler for the restored accessory
-        // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, existingAccessory);
-
-        // it is possible to remove platform accessories at any time using `api.unregisterPlatformAccessories`, e.g.:
-        // remove platform accessories when no longer present
-        // this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [existingAccessory]);
-        // this.log.info('Removing existing accessory from cache:', existingAccessory.displayName);
-      } else {
-        // the accessory does not yet exist, so we need to create it
-        this.log.info('Adding new accessory:', device.exampleDisplayName);
-
-        // create a new accessory
-        const accessory = new this.api.platformAccessory(device.exampleDisplayName, uuid);
-
-        // store a copy of the device object in the `accessory.context`
-        // the `context` property can be used to store any data about the accessory you may need
-        accessory.context.device = device;
-
-        // create the accessory handler for the newly create accessory
-        // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, accessory);
-
-        // link the accessory to your platform
-        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-      }
+    for (const subject of subjects) {
+      this.ensureAccessory(subject, null);
+      this.rooms.forEach(room => this.ensureAccessory(subject, room));
     }
+
+    this.updateAccessories();
+  }
+
+  ensureAccessory(subject: AccessorySubject, room: Room | null) {
+    const uuid = subject.accessoryUUID(room);
+    let accessory = this.accessories.get(uuid) || null;
+
+    const handler = this.ensureAccessoryHandler(accessory, subject, room);
+
+    if (accessory) {
+      this.api.updatePlatformAccessories([accessory]);
+      return accessory;
+    }
+
+    if (!handler) {
+      return null;
+    }
+
+    accessory = handler.accessory;
+    if (!accessory) {
+      return null;
+    }
+
+    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    this.log.debug('Registered new accessory:', accessory.displayName);
+
+    this.accessories.set(uuid, accessory);
+    return accessory;
+  }
+
+  private ensureAccessoryHandler(accessory: PlatformAccessory | null = null, subject: AccessorySubject | null = null, room: Room | null = null) {
+    const uuid = accessory?.UUID || subject!.accessoryUUID(room);
+    let handler = this.accessoryHandlers.get(uuid) || null;
+    if (handler) {
+      return handler;
+    }
+
+    const handlerClass = ACCESSORY_HANDLERS.find(handlerClass => {
+      return accessory
+        ? handlerClass.supportsAccessory(accessory)
+        : handlerClass.supportsSubject(subject!);
+    });
+    if (!handlerClass) {
+      return null;
+    }
+
+    handler = new handlerClass(this, accessory, subject, room);
+
+    this.accessoryHandlers.set(uuid, handler);
+    return handler;
+  }
+
+  removeInvalidAccessories() {
+    const invalidAccessories: PlatformAccessory[] = [];
+
+    this.accessories.forEach(accessory => {
+      const handler = this.ensureAccessoryHandler(accessory);
+      if (!handler?.valid) {
+        invalidAccessories.push(accessory);
+      }
+    });
+
+    for (const accessory of invalidAccessories) {
+      this.removeAccessory(accessory);
+    }
+  }
+
+  updateAccessories() {
+    this.accessories.forEach(accessory => {
+      const handler = this.ensureAccessoryHandler(accessory)!;
+      this.updateAccessoryHandler(handler);
+    });
+  }
+
+  removeAccessory(accessory: PlatformAccessory) {
+    this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    this.accessories.delete(accessory.UUID);
+    this.accessoryHandlers.delete(accessory.UUID);
+    this.log.debug('Removed accessory:', accessory.displayName);
+  }
+
+  updateAccessoryHandler(handler: AccessoryHandler) {
+    const updated = handler.update();
+
+    this.log[updated ? 'info' : 'debug'](
+      updated ? 'Updated accessory status:' : 'Accessory status unchanged:',
+      `"${handler.displayName}"`,
+      handler.active ? 'active' : 'inactive',
+    );
+
+    return updated;
   }
 }
