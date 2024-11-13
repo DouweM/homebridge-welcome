@@ -3,7 +3,7 @@ import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAcces
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 import { AccessorySubject } from './models/accessory_subject.js';
 import { Person, PersonRaw } from './models/person.js';
-import { Room, RoomRaw } from './models/room.js';
+import { Room } from './models/room.js';
 import { Role, RoleRaw } from './models/role.js';
 import { ConnectedPerson, ConnectedPersonRaw } from './models/connected_person.js';
 import { AccessoryHandler } from './handlers/base.js';
