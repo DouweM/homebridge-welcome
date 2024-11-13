@@ -3,7 +3,6 @@
   "displayName": "Welcome",
   "type": "module",
   "version": "0.1.0",
-  "private": true,
   "description": "Homebridge plugin for Welcome (https://github.com/DouweM/welcome)",
   "author": "DouweM",
   "license": "Apache-2.0",
