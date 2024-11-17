@@ -2,7 +2,7 @@
   "name": "homebridge-welcome",
   "displayName": "Welcome",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Homebridge plugin for Welcome (https://github.com/DouweM/welcome)",
   "author": "DouweM",
   "license": "Apache-2.0",
