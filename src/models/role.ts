@@ -11,12 +11,4 @@ export class Role extends AccessorySubject {
   ) {
     super(platform, raw);
   }
-
-  get config(): AccessoryConfig {
-    return {
-      homeAccessory: false,
-      roomAccessory: true,
-      lazy: false,
-    };
-  }
 }

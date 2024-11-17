@@ -1,6 +1,16 @@
+export type HomebridgeAttrs = {
+  name?: string;
+  [key: string]: unknown;
+}
+
+export type Attrs = {
+  homebridge?: HomebridgeAttrs;
+}
+
 export type ModelRaw = {
   id: string;
   display_name: string;
+  attrs?: Attrs;
 };
 
 export abstract class Model {
@@ -13,9 +23,16 @@ export abstract class Model {
     return this.raw.id;
   }
 
+  get attrs(): Attrs {
+    return this.raw.attrs ?? {};
+  }
+
+  get homebridgeAttrs(): HomebridgeAttrs {
+    return this.attrs.homebridge ?? {};
+  }
+
   get displayName(): string {
-    // TODO: use this.raw.attrs.homekit_name
-    return this.raw.display_name;
+    return this.homebridgeAttrs.name ?? this.raw.display_name;
   }
 
   equals(other: Model | null): boolean {

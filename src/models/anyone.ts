@@ -10,9 +10,8 @@ export class Anyone extends AccessorySubject {
 
   get config(): AccessoryConfig {
     return {
-      homeAccessory: true,
-      roomAccessory: true,
-      lazy: false,
+      ...super.config,
+      anywhere: true,
     };
   }
 }

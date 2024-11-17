@@ -16,12 +16,4 @@ export class Person extends AccessorySubject {
   get known(): boolean {
     return this.raw.known;
   }
-
-  get config(): AccessoryConfig {
-    return {
-      homeAccessory: false,
-      roomAccessory: true,
-      lazy: false,
-    };
-  }
 }

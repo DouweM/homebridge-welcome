@@ -74,7 +74,10 @@ export class WelcomePlatform implements DynamicPlatformPlugin {
       this.loadRooms(),
     ])
       .then(() => this.loadConnectedPeople())
-      .then(() => this.refreshAccessories());
+      .then(() => this.refreshAccessories())
+      .catch(err => {
+        this.log.error('Failed to refresh:', err);
+      });
   }
 
   private refreshPeriodically(): void {
@@ -141,8 +144,9 @@ export class WelcomePlatform implements DynamicPlatformPlugin {
 
   loadConnectedPeople(): Promise<void> {
     return fetch(`${this.config.server_url}/api/homes/${this.config.home_id}/people`)
-      .then(res => res.json())
+      .then(res => this.config.raw_connected_people || res.json()) // For testing purposes
       .then((raws: ConnectedPersonRaw[]) => raws.map(raw => new ConnectedPerson(this, raw)))
+      .then(connectedPeople => connectedPeople.filter(person => person.homeID === this.config.home_id))
       .then(connectedPeople => {
         this.connectedPeople = connectedPeople;
 
@@ -225,6 +229,9 @@ export class WelcomePlatform implements DynamicPlatformPlugin {
     }
 
     handler = new handlerClass(this, accessory, subject, room);
+    if (!handler.valid) {
+      return null;
+    }
 
     this.accessoryHandlers.set(uuid, handler);
     return handler;

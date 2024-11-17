@@ -134,15 +134,15 @@ export abstract class AccessoryHandler {
 
   protected shouldHaveAccessory(existingAccessory: PlatformAccessory | null = null) : boolean {
     if (this.room) {
-      if (!this.config.roomAccessory) {
+      if (!this.config.room || this.room.disabled) {
         return false;
       }
 
-      if (!existingAccessory && this.config.lazy && !this.active) {
+      if (!existingAccessory && (this.config.lazy || this.room.lazy) && !this.active) {
         return false;
       }
     } else {
-      if (!this.config.homeAccessory) {
+      if (!this.config.anywhere) {
         return false;
       }
     }

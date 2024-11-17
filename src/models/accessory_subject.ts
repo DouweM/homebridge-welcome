@@ -1,10 +1,16 @@
 import { WelcomePlatform } from '../platform.js';
-import { Model, ModelRaw } from './base.js';
+import { HomebridgeAttrs, Model, ModelRaw } from './base.js';
 import { Room } from './room.js';
 
+export type SubjectHomebridgeAttrs = HomebridgeAttrs & {
+  anywhere?: boolean;
+  room?: boolean;
+  lazy?: boolean;
+};
+
 export type AccessoryConfig = {
-  homeAccessory: boolean;
-  roomAccessory: boolean;
+  anywhere: boolean;
+  room: boolean;
   lazy: boolean;
 };
 
@@ -16,7 +22,17 @@ export abstract class AccessorySubject extends Model {
     super(raw);
   }
 
-  abstract get config(): AccessoryConfig;
+  get homebridgeAttrs(): SubjectHomebridgeAttrs {
+    return super.homebridgeAttrs as SubjectHomebridgeAttrs;
+  }
+
+  get config(): AccessoryConfig {
+    return {
+      anywhere: this.homebridgeAttrs.anywhere ?? false,
+      room: this.homebridgeAttrs.room ?? true,
+      lazy: this.homebridgeAttrs.lazy ?? false,
+    };
+  }
 
   protected accessoryUUIDKey(room: Room | null): string {
     const parts = [this.constructor.name, this.id];
