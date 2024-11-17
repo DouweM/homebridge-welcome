@@ -1,5 +1,5 @@
 import { WelcomePlatform } from '../platform.js';
-import { AccessorySubject, AccessoryConfig } from './accessory_subject.js';
+import { AccessorySubject } from './accessory_subject.js';
 import { ModelRaw } from './base.js';
 
 export type RoleRaw = ModelRaw;
